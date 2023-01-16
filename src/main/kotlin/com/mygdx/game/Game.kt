@@ -1,5 +1,6 @@
 package com.mygdx.game
 
+import alexey.client.utils.misc.toTextureRegions
 import alexey.server.utils.level.createBody
 import alexey.server.utils.tiled.deserializers.ImmutableIntListDeserializer
 import alexey.server.utils.tiled.map.TiledMap
@@ -25,11 +26,11 @@ class Game: Game() {
 	private lateinit var spriteBatch: SpriteBatch
 
 	private lateinit var setTexture: Texture
-	private var textures = emptyArray<TextureRegion>()
+	private var textures = emptyList<TextureRegion>()
 
-	lateinit var player: Entity
-	private val enemies = ArrayList<Entity>()
-	private val walls = ArrayList<Entity>()
+	private lateinit var player: GameEntity
+	private val enemies = ArrayList<GameEntity>()
+	private val walls = ArrayList<GameEntity>()
 
 	private val forceController = ForceController()
 
@@ -51,11 +52,13 @@ class Game: Game() {
 
 		map.layers.forEach {
 			it.entities.forEach { blankEntity ->
-				when(blankEntity.type) {                    // Супер функция хитбоксов :)  v
-					"player"->   player = Entity(textures[Entity.PLAYER], world.createBody(blankEntity), blankEntity.width)
-					"enemy" -> enemies.add(Entity(textures[Entity.ENEMY], world.createBody(blankEntity), blankEntity.width, 1f))
-					else -> walls.add(Entity(textures[blankEntity.index], world.createBody(blankEntity), blankEntity.width))
-				}                                                   // ^ Номер текстуры в set.json (слева на право)
+				when(blankEntity.type) {// Супер функция хитбоксов :)  v
+					"player"->   player = PhysicEntity(world.createBody(blankEntity), textures[PhysicEntity.PLAYER], blankEntity)
+					"enemy" -> enemies.add(PhysicEntity(world.createBody(blankEntity), textures[PhysicEntity.ENEMY], blankEntity))
+					else -> walls.add(if (blankEntity.shapes.isEmpty())
+						ImageEntity(textures[blankEntity.index], blankEntity) else
+						PhysicEntity(world.createBody(blankEntity), textures[blankEntity.index], blankEntity))
+				}                                                   //                     ^ Номер текстуры в set.json (слева на право)
 			}
 		}
 	}
@@ -67,32 +70,25 @@ class Game: Game() {
 		spriteBatch = SpriteBatch()
 
 		camera = OrthographicCamera(50f, 25f)
-		camera.position.set(Vector2(0f, 0f), 0f)
+		camera.position.set(Vector2(), 0f)
 
 		setTexture = Texture("src/main/resources/icons/set.png")
-		textures = Array(5) {
-			val row = it / 2
-			val col = it.mod(2)
-			TextureRegion(setTexture, 320 * col, 320 * row, 320, 320 )
-		}
+		textures = setTexture.toTextureRegions(320, 320)
 
 		Gdx.input.inputProcessor = forceController
 		Gdx.gl.glClearColor(0.18f, 0.56f, 0.4f, 225f)
-
 		loadMap("src/main/resources/icons/map.json", "src/main/resources/icons/set.json")
 
 	}
 
 	private fun update(){
 		world.step(1/60f, 4, 4)
-		camera.position.set(player.getPosition(), 0F)
+		camera.position.set(player.getCenter(), 0f)
 		camera.update()
 		spriteBatch.projectionMatrix = camera.combined
 
 		player.applyForceToCenter(forceController.getForce())
 		enemies.forEach { it.moveAt(player.getPosition()) }
-		speedLimiter(player)
-		friction(player)
 	}
 	override fun render() {
 		update()
